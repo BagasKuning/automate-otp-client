@@ -9,8 +9,6 @@ const PROVIDERS = [
   "scribd",
 ];
 
-const API_URL = "http://localhost:3000/get-otp";
-
 type ResponseOtp = {
   otp: string;
   provider: string;
@@ -33,11 +31,10 @@ export default function App() {
       setLoading(true);
       setResult(null);
 
-      const response = await fetch(API_URL, {
+      const response = await fetch("/api/get-otp", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-API-Key": import.meta.env.VITE_API_KEY,
         },
         body: JSON.stringify({
           account: form.account,
