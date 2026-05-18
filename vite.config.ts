@@ -11,7 +11,7 @@ export default defineConfig(({ mode }) => {
     server: {
       proxy: {
         "/api": {
-          target: env.SERVER_URL || "http://localhost:3000",
+          target: env.SERVER_URL || "https://80a2-182-9-36-27.ngrok-free.app",
 
           changeOrigin: true,
 
