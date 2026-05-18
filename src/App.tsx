@@ -51,7 +51,7 @@ export default function App() {
 
       setResult(data);
     } catch (error: any) {
-      alert(error.message);
+      alert(error?.error || error?.message || "Something wrong.");
     } finally {
       setLoading(false);
     }
@@ -76,55 +76,64 @@ export default function App() {
 
         {/* FORM */}
         <div className="space-y-4">
-          <select
-            value={form.provider}
-            onChange={(e) =>
-              setForm((p) => ({
-                ...p,
-                provider: e.target.value,
-              }))
-            }
-            className="h-11 w-full rounded-xl border border-zinc-200 px-3 text-sm focus:border-black outline-none"
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSubmit();
+            }}
+            className="space-y-4"
           >
-            {PROVIDERS.map((p) => (
-              <option key={p} value={p}>
-                {capitalize(p)}
-              </option>
-            ))}
-          </select>
-
-          <input
-            placeholder="Account email"
-            value={form.account}
-            onChange={(e) =>
-              setForm((p) => ({
-                ...p,
-                account: e.target.value,
-              }))
-            }
-            className="h-11 w-full rounded-xl border border-zinc-200 px-3 text-sm focus:border-black outline-none"
-          />
-
-          <input
-            type="password"
-            placeholder="Password"
-            value={form.password}
-            onChange={(e) =>
-              setForm((p) => ({
-                ...p,
-                password: e.target.value,
-              }))
-            }
-            className="h-11 w-full rounded-xl border border-zinc-200 px-3 text-sm focus:border-black outline-none"
-          />
-
-          <button
-            onClick={handleSubmit}
-            disabled={loading}
-            className="h-11 w-full rounded-xl bg-[#08a081] text-white text-sm font-medium hover:opacity-90 disabled:opacity-50"
-          >
-            {loading ? "Processing..." : "Request OTP"}
-          </button>
+            <select
+              value={form.provider}
+              onChange={(e) =>
+                setForm((p) => ({
+                  ...p,
+                  provider: e.target.value,
+                }))
+              }
+              className="h-11 w-full rounded-xl border border-zinc-200 px-3 text-sm focus:border-black outline-none"
+            >
+              {PROVIDERS.map((p) => (
+                <option key={p} value={p}>
+                  {capitalize(p)}
+                </option>
+              ))}
+            </select>
+            <input
+              placeholder="Email"
+              value={form.account}
+              onChange={(e) =>
+                setForm((p) => ({
+                  ...p,
+                  account: e.target.value,
+                }))
+              }
+              className="h-11 w-full rounded-xl border border-zinc-200 px-3 text-sm focus:border-black outline-none"
+            />
+            <input
+              type="password"
+              placeholder={
+                form.account.includes("gmail.com")
+                  ? "Password (optional for gmail.com domain)"
+                  : "Password"
+              }
+              value={form.password}
+              onChange={(e) =>
+                setForm((p) => ({
+                  ...p,
+                  password: e.target.value,
+                }))
+              }
+              className="h-11 w-full rounded-xl border border-zinc-200 px-3 text-sm focus:border-black outline-none"
+            />
+            <button
+              type="submit"
+              disabled={loading}
+              className="h-11 w-full rounded-xl bg-[#08a081] text-white text-sm font-medium hover:opacity-90 disabled:opacity-50"
+            >
+              {loading ? "Processing..." : "Request OTP"}
+            </button>{" "}
+          </form>
         </div>
 
         {/* RESULT */}
