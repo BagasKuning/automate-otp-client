@@ -3,7 +3,7 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), "");
+  const env = loadEnv(mode, process.cwd(), "VITE_");
 
   return {
     plugins: [react(), tailwindcss()],
@@ -11,7 +11,7 @@ export default defineConfig(({ mode }) => {
     server: {
       proxy: {
         "/api": {
-          target: env.SERVER_URL || "https://80a2-182-9-36-27.ngrok-free.app",
+          target: env.VITE_SERVER_URL,
 
           changeOrigin: true,
 
@@ -19,7 +19,7 @@ export default defineConfig(({ mode }) => {
 
           configure: (proxy) => {
             proxy.on("proxyReq", (proxyReq) => {
-              proxyReq.setHeader("x-api-key", env.API_KEY || "");
+              proxyReq.setHeader("x-api-key", env.VITE_API_KEY);
             });
           },
         },
