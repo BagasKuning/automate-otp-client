@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const PROVIDERS = [
   "netflix",
@@ -16,6 +16,9 @@ type ResponseOtp = {
 };
 
 export default function App() {
+  const [accounts, setAccounts] = useState<string[]>([]);
+  const [accountOpen, setAccountOpen] = useState(false);
+
   const [loading, setLoading] = useState(false);
 
   const [result, setResult] = useState<ResponseOtp | null>(null);
@@ -56,6 +59,26 @@ export default function App() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const loadAccounts = async () => {
+      try {
+        const response = await fetch("/api/accounts", {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        });
+        const data = await response.json();
+
+        setAccounts(data); // simpan full list
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
+    loadAccounts();
+  }, []);
 
   return (
     <main className="min-h-screen bg-[#08a081]/15 flex items-center justify-center p-6">
@@ -99,17 +122,48 @@ export default function App() {
                 </option>
               ))}
             </select>
-            <input
-              placeholder="Email"
-              value={form.account}
-              onChange={(e) =>
-                setForm((p) => ({
-                  ...p,
-                  account: e.target.value,
-                }))
-              }
-              className="h-11 w-full rounded-xl border border-zinc-200 px-3 text-sm focus:border-black outline-none"
-            />
+            <div className="relative">
+              <input
+                placeholder="Email"
+                value={form.account}
+                onChange={(e) => {
+                  setForm((p) => ({ ...p, account: e.target.value }));
+                  setAccountOpen(true);
+                }}
+                onFocus={() => setAccountOpen(true)}
+                className="h-11 w-full rounded-xl border border-zinc-200 px-3 text-sm focus:border-black outline-none"
+              />
+
+              {accountOpen && (
+                <div className="absolute z-10 mt-1 w-full rounded-xl border bg-white shadow max-h-60 overflow-y-auto">
+                  {accounts
+                    .filter((acc) =>
+                      acc.toLowerCase().includes(form.account.toLowerCase()),
+                    )
+                    .slice(0, 50) // optional: biar gak render kebanyakan
+                    .map((acc) => (
+                      <div
+                        key={acc}
+                        onClick={() => {
+                          setForm((p) => ({ ...p, account: acc }));
+                          setAccountOpen(false);
+                        }}
+                        className="px-3 py-2 text-sm hover:bg-zinc-100 cursor-pointer"
+                      >
+                        {acc}
+                      </div>
+                    ))}
+
+                  {accounts.filter((acc) =>
+                    acc.toLowerCase().includes(form.account.toLowerCase()),
+                  ).length === 0 && (
+                    <div className="px-3 py-2 text-sm text-zinc-400">
+                      No results
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
             <input
               type="password"
               placeholder={
