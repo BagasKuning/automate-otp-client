@@ -11,7 +11,7 @@ export default defineConfig(({ mode }) => {
     server: {
       proxy: {
         "/api": {
-          target: env.VITE_SERVER_URL,
+          target: env.SERVER_URL,
 
           changeOrigin: true,
 
@@ -19,7 +19,7 @@ export default defineConfig(({ mode }) => {
 
           configure: (proxy) => {
             proxy.on("proxyReq", (proxyReq) => {
-              proxyReq.setHeader("x-api-key", env.VITE_API_KEY);
+              proxyReq.setHeader("x-api-key", env.API_KEY);
             });
           },
         },
