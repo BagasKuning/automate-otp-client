@@ -20,7 +20,18 @@ export default function App() {
   const [accountOpen, setAccountOpen] = useState(false);
   const [accountsLoading, setAccountsLoading] = useState(true);
   const [accountsError, setAccountsError] = useState<string | null>(null);
+  const [deletingAccount, setDeletingAccount] = useState<string | null>(null);
+  const [deleteAccountMessage, setDeleteAccountMessage] = useState("");
+  const [deleteAccountError, setDeleteAccountError] = useState(false);
   const accountPickerRef = useRef<HTMLDivElement>(null);
+  const [addAccountOpen, setAddAccountOpen] = useState(false);
+  const [newAccountEmail, setNewAccountEmail] = useState("");
+  const [creatingAccount, setCreatingAccount] = useState(false);
+  const [createAccountMessage, setCreateAccountMessage] = useState("");
+  const [createAccountError, setCreateAccountError] = useState(false);
+  const [accountCreationJobId, setAccountCreationJobId] = useState<
+    string | null
+  >(null);
 
   const [loading, setLoading] = useState(false);
 
@@ -43,7 +54,10 @@ export default function App() {
       if (!response.ok) throw new Error(`Server returned ${response.status}.`);
 
       const data: unknown = await response.json();
-      if (!Array.isArray(data) || !data.every((item) => typeof item === "string")) {
+      if (
+        !Array.isArray(data) ||
+        !data.every((item) => typeof item === "string")
+      ) {
         throw new Error("Invalid account list from server.");
       }
 
@@ -88,6 +102,74 @@ export default function App() {
     }
   };
 
+  const handleCreateAccount = async () => {
+    try {
+      setCreatingAccount(true);
+      setCreateAccountMessage("");
+
+      const response = await fetch("/api/accounts/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: newAccountEmail.trim() }),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data?.message || "Gagal membuat profil email.");
+      }
+
+      setCreateAccountError(false);
+      setCreateAccountMessage(
+        data.queuePosition > 1
+          ? `Permintaan masuk antrean posisi ${data.queuePosition}. Chrome akan terbuka setelah proses sebelumnya selesai.`
+          : "Permintaan diproses. Chrome akan terbuka sebentar lagi.",
+      );
+      setAccountCreationJobId(data.jobId);
+      setNewAccountEmail("");
+    } catch (error) {
+      setCreateAccountError(true);
+      setCreateAccountMessage(
+        error instanceof Error ? error.message : "Gagal membuat profil email.",
+      );
+    } finally {
+      setCreatingAccount(false);
+    }
+  };
+
+  const handleDeleteAccount = async (account: string) => {
+    const confirmed = window.confirm(
+      `Hapus profile lokal ${account}? Pastikan semua jendela Chrome profile ini sudah ditutup. Folder data Chrome dan file launcher akan dihapus permanen. Akun Google-nya sendiri tidak dihapus.`,
+    );
+    if (!confirmed) return;
+
+    try {
+      setDeletingAccount(account);
+      setDeleteAccountMessage("");
+      const response = await fetch(
+        `/api/accounts/${encodeURIComponent(account)}`,
+        { method: "DELETE" },
+      );
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.message || "Gagal menghapus profil email.");
+      }
+
+      if (form.account.toLowerCase() === account.toLowerCase()) {
+        setForm((previous) => ({ ...previous, account: "", password: "" }));
+      }
+      setDeleteAccountError(false);
+      setDeleteAccountMessage(data.message);
+      await loadAccounts();
+    } catch (error) {
+      setDeleteAccountError(true);
+      setDeleteAccountMessage(
+        error instanceof Error ? error.message : "Gagal menghapus profil email.",
+      );
+    } finally {
+      setDeletingAccount(null);
+    }
+  };
+
   useEffect(() => {
     loadAccounts();
 
@@ -101,6 +183,52 @@ export default function App() {
   }, [loadAccounts]);
 
   useEffect(() => {
+    if (!accountCreationJobId) return;
+
+    let stopped = false;
+    const pollJob = async () => {
+      try {
+        const response = await fetch(
+          `/api/accounts/create/${accountCreationJobId}`,
+          { cache: "no-store" },
+        );
+        const data = await response.json();
+        if (!response.ok)
+          throw new Error(data?.message || "Status antrean gagal dimuat.");
+        if (stopped) return;
+
+        setCreateAccountError(data.status === "failed");
+        setCreateAccountMessage(
+          data.status === "queued" && data.queuePosition
+            ? `Antrean posisi ${data.queuePosition}: ${data.message}`
+            : data.message,
+        );
+
+        if (["completed", "failed"].includes(data.status)) {
+          setAccountCreationJobId(null);
+          if (data.status === "completed") await loadAccounts();
+        }
+      } catch (error) {
+        if (!stopped) {
+          setCreateAccountError(true);
+          setCreateAccountMessage(
+            error instanceof Error
+              ? error.message
+              : "Gagal membaca status antrean.",
+          );
+        }
+      }
+    };
+
+    void pollJob();
+    const interval = window.setInterval(pollJob, 2000);
+    return () => {
+      stopped = true;
+      window.clearInterval(interval);
+    };
+  }, [accountCreationJobId, loadAccounts]);
+
+  useEffect(() => {
     if (!accountOpen) return;
 
     const closeOnOutsideClick = (event: PointerEvent) => {
@@ -110,13 +238,14 @@ export default function App() {
     };
 
     document.addEventListener("pointerdown", closeOnOutsideClick);
-    return () => document.removeEventListener("pointerdown", closeOnOutsideClick);
+    return () =>
+      document.removeEventListener("pointerdown", closeOnOutsideClick);
   }, [accountOpen]);
 
   return (
     <main className="min-h-screen bg-[#08a081]/15 flex items-center justify-center p-6">
       {/* CARD */}
-      <div className="rounded-[28px] min-w-125 border border-zinc-200 bg-white shadow-sm p-10">
+      <div className="rounded-[28px] w-152 border border-zinc-200 bg-white shadow-sm p-10">
         {/* HEADER */}
         <div className="text-center mb-6">
           <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#08a081] text-white">
@@ -133,32 +262,52 @@ export default function App() {
         {/* FORM */}
         <div className="space-y-4">
           <form
+            autoComplete="off"
             onSubmit={(e) => {
               e.preventDefault();
               handleSubmit();
             }}
-            className="space-y-4"
+            className="space-y-5"
           >
-            <select
-              value={form.provider}
-              onChange={(e) =>
-                setForm((p) => ({
-                  ...p,
-                  provider: e.target.value,
-                }))
-              }
-              className="h-11 w-full rounded-xl border border-zinc-200 px-3 text-sm focus:border-black outline-none"
-            >
-              {PROVIDERS.map((p) => (
-                <option key={p} value={p}>
-                  {capitalize(p)}
-                </option>
-              ))}
-            </select>
-            <div className="relative" ref={accountPickerRef}>
+            <div className="space-y-2">
+              <label
+                htmlFor="provider-select"
+                className="block text-sm font-medium text-zinc-700"
+              >
+                Layanan
+              </label>
+              <select
+                id="provider-select"
+                value={form.provider}
+                onChange={(e) =>
+                  setForm((p) => ({
+                    ...p,
+                    provider: e.target.value,
+                  }))
+                }
+                className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none focus:border-[#08a081] focus:ring-2 focus:ring-[#08a081]/15"
+              >
+                {PROVIDERS.map((p) => (
+                  <option key={p} value={p}>
+                    {capitalize(p)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2" ref={accountPickerRef}>
+              <label
+                htmlFor="account-picker-search"
+                className="block text-sm font-medium text-zinc-700"
+              >
+                Email akun
+              </label>
               <input
-                placeholder="Cari email..."
+                type="search"
+                id="account-picker-search"
+                name="account-picker-search"
+                placeholder="Ketik untuk mencari email"
                 autoComplete="off"
+                spellCheck={false}
                 value={form.account}
                 onChange={(e) => {
                   setForm((p) => ({ ...p, account: e.target.value }));
@@ -168,23 +317,26 @@ export default function App() {
                   setAccountOpen(true);
                   loadAccounts();
                 }}
-                className="h-11 w-full rounded-xl border border-zinc-200 px-3 text-sm focus:border-black outline-none"
+                className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none focus:border-[#08a081] focus:ring-2 focus:ring-[#08a081]/15"
               />
 
               {accountOpen && (
-                <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-xl border bg-white shadow-lg">
-                  <div className="flex items-center justify-between border-b px-3 py-2 text-xs text-zinc-500">
-                    <span>{accounts.length} email tersinkron</span>
+                <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
+                  <div className="flex items-center justify-between border-b border-zinc-100 bg-zinc-50 px-3 py-2">
+                    <span className="text-xs text-zinc-500">
+                      Pilih email <span className="px-1">·</span>
+                      {accounts.length} tersedia
+                    </span>
                     <button
                       type="button"
                       onMouseDown={(event) => event.preventDefault()}
                       onClick={loadAccounts}
-                      className="font-medium text-[#08a081] hover:underline"
+                      className="text-xs font-medium text-[#08a081] hover:underline"
                     >
                       Sync sekarang
                     </button>
                   </div>
-                  <div className="max-h-52 overflow-y-auto">
+                  <div className="max-h-48 overflow-y-auto">
                     {accountsLoading && accounts.length === 0 ? (
                       <div className="px-3 py-3 text-sm text-zinc-400">
                         Mengambil email dari komputer server...
@@ -199,17 +351,30 @@ export default function App() {
                       </button>
                     ) : filteredAccounts.length > 0 ? (
                       filteredAccounts.slice(0, 50).map((account) => (
-                        <button
-                          type="button"
+                        <div
                           key={account}
-                          onClick={() => {
-                            setForm((previous) => ({ ...previous, account }));
-                            setAccountOpen(false);
-                          }}
-                          className="block w-full px-3 py-2 text-left text-sm hover:bg-zinc-100"
+                          className="flex items-center border-b border-zinc-100 last:border-0"
                         >
-                          {account}
-                        </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setForm((previous) => ({ ...previous, account }));
+                              setAccountOpen(false);
+                            }}
+                            className="min-w-0 flex-1 truncate px-3 py-2.5 text-left text-sm hover:bg-emerald-50"
+                          >
+                            {account}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={deletingAccount !== null}
+                            aria-label={`Hapus profil lokal ${account}`}
+                            onClick={() => void handleDeleteAccount(account)}
+                            className="shrink-0 px-3 py-2 text-xs text-red-600 hover:bg-red-50 disabled:opacity-50"
+                          >
+                            {deletingAccount === account ? "Menghapus…" : "Hapus"}
+                          </button>
+                        </div>
                       ))
                     ) : (
                       <div className="px-3 py-3 text-sm text-zinc-400">
@@ -219,29 +384,95 @@ export default function App() {
                       </div>
                     )}
                   </div>
+                  {deleteAccountMessage && (
+                    <p
+                      aria-live="polite"
+                      className={`border-t px-3 py-2 text-xs ${deleteAccountError ? "text-red-600" : "text-emerald-700"}`}
+                    >
+                      {deleteAccountMessage}
+                    </p>
+                  )}
                 </div>
               )}
             </div>
-            <input
-              type="password"
-              placeholder={
-                form.account.includes("gmail.com")
-                  ? "Password (optional for gmail.com domain)"
-                  : "Password"
-              }
-              value={form.password}
-              onChange={(e) =>
-                setForm((p) => ({
-                  ...p,
-                  password: e.target.value,
-                }))
-              }
-              className="h-11 w-full rounded-xl border border-zinc-200 px-3 text-sm focus:border-black outline-none"
-            />
+            <div>
+              <button
+                type="button"
+                onClick={() => {
+                  setAddAccountOpen((open) => !open);
+                  setCreateAccountMessage("");
+                }}
+                className="w-full rounded-lg border border-dashed border-zinc-300 px-3 py-2.5 text-left text-sm font-medium text-zinc-600 transition hover:border-[#08a081] hover:bg-emerald-50 hover:text-[#08a081]"
+              >
+                {addAccountOpen ? "− Tutup form akun baru" : "+ Tambah email baru"}
+              </button>
+
+              {addAccountOpen && (
+                <div className="mt-3 space-y-3 rounded-xl border border-zinc-200 bg-zinc-50 p-4">
+                  <p className="text-xs leading-5 text-zinc-600">
+                    Permintaan akun diproses satu per satu. Chrome akan terbuka
+                    tanpa mengisi form otomatis. Setelah selesai login, tutup
+                    semua jendela Chrome profile tersebut agar permintaan
+                    berikutnya diproses.
+                  </p>
+                  <input
+                    type="text"
+                    name="new-account-email"
+                    inputMode="email"
+                    autoComplete="off"
+                    placeholder="nama@email.com"
+                    value={newAccountEmail}
+                    onChange={(event) => setNewAccountEmail(event.target.value)}
+                    className="h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 text-sm outline-none focus:border-[#08a081]"
+                  />
+                  <button
+                    type="button"
+                    disabled={creatingAccount || !newAccountEmail.trim()}
+                    onClick={handleCreateAccount}
+                    className="h-10 w-full rounded-lg bg-[#08a081] text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+                  >
+                    {creatingAccount ? "Mengantrekan..." : "Antrekan akun"}
+                  </button>
+                  {createAccountMessage && (
+                    <p
+                      aria-live="polite"
+                      className={`text-xs leading-5 ${createAccountError ? "text-red-600" : "text-emerald-700"}`}
+                    >
+                      {createAccountMessage}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="space-y-2">
+              <label
+                htmlFor="account-password"
+                className="block text-sm font-medium text-zinc-700"
+              >
+                Password{" "}
+                {form.account.toLowerCase().includes("gmail.com") && (
+                  <span className="font-normal text-zinc-400">(opsional untuk Gmail)</span>
+                )}
+              </label>
+              <input
+                id="account-password"
+                type="password"
+                autoComplete="new-password"
+                placeholder="Masukkan password akun"
+                value={form.password}
+                onChange={(e) =>
+                  setForm((p) => ({
+                    ...p,
+                    password: e.target.value,
+                  }))
+                }
+                className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none focus:border-[#08a081] focus:ring-2 focus:ring-[#08a081]/15"
+              />
+            </div>
             <button
               type="submit"
               disabled={loading}
-              className="h-11 w-full rounded-xl bg-[#08a081] text-white text-sm font-medium hover:opacity-90 disabled:opacity-50"
+              className="h-12 w-full rounded-xl bg-[#08a081] text-sm font-semibold text-white shadow-sm transition hover:bg-[#078c71] disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loading ? "Processing..." : "Request OTP"}
             </button>{" "}

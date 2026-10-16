@@ -12,15 +12,18 @@ export async function handler(event) {
     const serverUrl = (
       process.env.SERVER_URL ||
       process.env.VITE_SERVER_URL ||
-      "https://washout-harsh-shimmy.ngrok-free.dev"
+      "https://4f97-2404-c0-9602-d4fd-255f-35a6-1696-a65f.ngrok-free.app"
     ).replace(/\/$/, "");
 
     const response = await fetch(`${serverUrl}${path}`, {
       method: event.httpMethod,
 
       headers: {
-        ...(process.env.VITE_API_KEY
-          ? { "x-api-key": process.env.VITE_API_KEY }
+        ...(process.env.SERVER_API_KEY || process.env.VITE_API_KEY
+          ? {
+              "x-api-key":
+                process.env.SERVER_API_KEY || process.env.VITE_API_KEY,
+            }
           : {}),
         "content-type": event.headers?.["content-type"] || "application/json",
       },

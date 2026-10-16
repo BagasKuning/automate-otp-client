@@ -84,3 +84,14 @@ Set `VITE_SERVER_URL` in the client environment if the backend runs at another
 address. For Netlify, set `SERVER_URL` to the public URL that reaches the
 computer running the backend, then redeploy the client. The existing ngrok URL
 is kept as a fallback.
+
+Admins can add a profile with **Tambah akun email** in the client. The server
+creates the Chrome profile folder and launcher, then opens Google's sign-in
+page in Chrome on the computer running the backend. It fills the email and
+presses Enter; the admin completes sign-in or chooses **Buat akun** manually.
+The client sends this action through the server-side proxy; the API key is not
+sent from browser code.
+
+For Netlify, configure `SERVER_API_KEY` as a function environment variable with
+the same value as the server's `SERVER_API_KEY`. The local Vite proxy reads the
+key from the sibling server project's `.env` automatically.
