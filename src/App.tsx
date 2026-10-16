@@ -529,7 +529,7 @@ export default function App() {
                   <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
                     <div className="flex items-center justify-between border-b border-zinc-100 bg-zinc-50 px-3 py-2">
                       <span className="text-xs text-zinc-500">
-                        Pilih email <span className="px-1">Â·</span>
+                        Pilih email
                         {accounts.length} tersedia
                       </span>
                       <button
@@ -572,17 +572,6 @@ export default function App() {
                               className="min-w-0 flex-1 truncate px-3 py-2.5 text-left text-sm hover:bg-emerald-50"
                             >
                               {account}
-                            </button>
-                            <button
-                              type="button"
-                              disabled={deletingAccount !== null}
-                              aria-label={`Hapus profil lokal ${account}`}
-                              onClick={() => void handleDeleteAccount(account)}
-                              className="shrink-0 px-3 py-2 text-xs text-red-600 hover:bg-red-50 disabled:opacity-50"
-                            >
-                              {deletingAccount === account
-                                ? "Menghapusâ€¦"
-                                : "Hapus"}
                             </button>
                           </div>
                         ))
@@ -826,6 +815,16 @@ export default function App() {
                         </span>
                         <button
                           type="button"
+                          disabled={deletingAccount !== null}
+                          onClick={() => void handleDeleteAccount(account)}
+                          className="shrink-0 rounded-lg border border-red-200 px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                        >
+                          {deletingAccount === account
+                            ? "Menghapus..."
+                            : "Hapus"}
+                        </button>
+                        <button
+                          type="button"
                           disabled={focusingLauncher !== null}
                           onClick={() => void handleFocusLauncher(account)}
                           className="shrink-0 rounded-lg border border-[#08a081] px-3 py-2 text-xs font-medium text-[#08a081] hover:bg-emerald-50 disabled:opacity-50"
@@ -850,6 +849,14 @@ export default function App() {
                     className={`text-xs ${launcherError ? "text-red-600" : "text-emerald-700"}`}
                   >
                     {launcherMessage}
+                  </p>
+                )}
+                {deleteAccountMessage && (
+                  <p
+                    aria-live="polite"
+                    className={`text-xs ${deleteAccountError ? "text-red-600" : "text-emerald-700"}`}
+                  >
+                    {deleteAccountMessage}
                   </p>
                 )}
               </section>
