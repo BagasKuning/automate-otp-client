@@ -4,18 +4,33 @@ configDotenv();
 
 export async function handler(event) {
   try {
-    // ambil path setelah /api
-    const path = event.path.replace("/.netlify/functions/api", "");
+    const path =
+      event.path
+        .replace(/^\/\.netlify\/functions\/api/, "")
+        .replace(/^\/api/, "") || "/";
 
-    const targetUrl = "https://washout-harsh-shimmy.ngrok-free.dev" + path;
+    const serverUrl = (
+      process.env.SERVER_URL ||
+      process.env.VITE_SERVER_URL ||
+      "https://washout-harsh-shimmy.ngrok-free.dev"
+    ).replace(/\/$/, "");
 
-    const response = await fetch(targetUrl, {
+    const response = await fetch(`${serverUrl}${path}`, {
       method: event.httpMethod,
 
       headers: {
-        "x-api-key": process.env.VITE_API_KEY,
-        "content-type": event.headers["content-type"] || "application/json",
+        ...(process.env.VITE_API_KEY
+          ? { "x-api-key": process.env.VITE_API_KEY }
+          : {}),
+        "content-type": event.headers?.["content-type"] || "application/json",
       },
+      ...(event.body && event.httpMethod !== "GET"
+        ? {
+            body: event.isBase64Encoded
+              ? Buffer.from(event.body, "base64")
+              : event.body,
+          }
+        : {}),
     });
 
     const text = await response.text();

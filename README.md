@@ -71,3 +71,16 @@ export default defineConfig([
   },
 ])
 ```
+# OTP client
+
+The account picker gets its email list from the server's `/accounts` endpoint.
+That endpoint scans `ACCOUNT_DATA_DIR` on the computer running the server. The
+client syncs when opened, whenever the email field receives focus, every 30
+seconds, or when **Sync sekarang** is clicked. Search is case-insensitive and
+matches any part of the email address.
+
+For local development, the Vite proxy uses `http://localhost:3000` by default.
+Set `VITE_SERVER_URL` in the client environment if the backend runs at another
+address. For Netlify, set `SERVER_URL` to the public URL that reaches the
+computer running the backend, then redeploy the client. The existing ngrok URL
+is kept as a fallback.

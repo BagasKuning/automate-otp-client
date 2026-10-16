@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const PROVIDERS = [
   "netflix",
@@ -18,6 +18,9 @@ type ResponseOtp = {
 export default function App() {
   const [accounts, setAccounts] = useState<string[]>([]);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [accountsLoading, setAccountsLoading] = useState(true);
+  const [accountsError, setAccountsError] = useState<string | null>(null);
+  const accountPickerRef = useRef<HTMLDivElement>(null);
 
   const [loading, setLoading] = useState(false);
 
@@ -28,6 +31,31 @@ export default function App() {
     account: "",
     password: "",
   });
+
+  const filteredAccounts = accounts.filter((account) =>
+    account.toLowerCase().includes(form.account.trim().toLowerCase()),
+  );
+
+  const loadAccounts = useCallback(async () => {
+    try {
+      setAccountsLoading(true);
+      const response = await fetch("/api/accounts", { cache: "no-store" });
+      if (!response.ok) throw new Error(`Server returned ${response.status}.`);
+
+      const data: unknown = await response.json();
+      if (!Array.isArray(data) || !data.every((item) => typeof item === "string")) {
+        throw new Error("Invalid account list from server.");
+      }
+
+      setAccounts(data);
+      setAccountsError(null);
+    } catch (error) {
+      console.error("Failed to sync accounts:", error);
+      setAccountsError("Tidak bisa sync daftar email. Coba lagi.");
+    } finally {
+      setAccountsLoading(false);
+    }
+  }, []);
 
   const handleSubmit = async () => {
     try {
@@ -61,24 +89,29 @@ export default function App() {
   };
 
   useEffect(() => {
-    const loadAccounts = async () => {
-      try {
-        const response = await fetch("/api/accounts", {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        });
-        const data = await response.json();
+    loadAccounts();
 
-        setAccounts(data); // simpan full list
-      } catch (err) {
-        console.error(err);
+    const interval = window.setInterval(loadAccounts, 30_000);
+    window.addEventListener("focus", loadAccounts);
+
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", loadAccounts);
+    };
+  }, [loadAccounts]);
+
+  useEffect(() => {
+    if (!accountOpen) return;
+
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      if (!accountPickerRef.current?.contains(event.target as Node)) {
+        setAccountOpen(false);
       }
     };
 
-    loadAccounts();
-  }, []);
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    return () => document.removeEventListener("pointerdown", closeOnOutsideClick);
+  }, [accountOpen]);
 
   return (
     <main className="min-h-screen bg-[#08a081]/15 flex items-center justify-center p-6">
@@ -122,45 +155,70 @@ export default function App() {
                 </option>
               ))}
             </select>
-            <div className="relative">
+            <div className="relative" ref={accountPickerRef}>
               <input
-                placeholder="Email"
+                placeholder="Cari email..."
+                autoComplete="off"
                 value={form.account}
                 onChange={(e) => {
                   setForm((p) => ({ ...p, account: e.target.value }));
                   setAccountOpen(true);
                 }}
-                onFocus={() => setAccountOpen(true)}
+                onFocus={() => {
+                  setAccountOpen(true);
+                  loadAccounts();
+                }}
                 className="h-11 w-full rounded-xl border border-zinc-200 px-3 text-sm focus:border-black outline-none"
               />
 
               {accountOpen && (
-                <div className="absolute z-10 mt-1 w-full rounded-xl border bg-white shadow max-h-60 overflow-y-auto">
-                  {accounts
-                    .filter((acc) =>
-                      acc.toLowerCase().includes(form.account.toLowerCase()),
-                    )
-                    .slice(0, 50) // optional: biar gak render kebanyakan
-                    .map((acc) => (
-                      <div
-                        key={acc}
-                        onClick={() => {
-                          setForm((p) => ({ ...p, account: acc }));
-                          setAccountOpen(false);
-                        }}
-                        className="px-3 py-2 text-sm hover:bg-zinc-100 cursor-pointer"
-                      >
-                        {acc}
+                <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-xl border bg-white shadow-lg">
+                  <div className="flex items-center justify-between border-b px-3 py-2 text-xs text-zinc-500">
+                    <span>{accounts.length} email tersinkron</span>
+                    <button
+                      type="button"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={loadAccounts}
+                      className="font-medium text-[#08a081] hover:underline"
+                    >
+                      Sync sekarang
+                    </button>
+                  </div>
+                  <div className="max-h-52 overflow-y-auto">
+                    {accountsLoading && accounts.length === 0 ? (
+                      <div className="px-3 py-3 text-sm text-zinc-400">
+                        Mengambil email dari komputer server...
                       </div>
-                    ))}
-
-                  {accounts.filter((acc) =>
-                    acc.toLowerCase().includes(form.account.toLowerCase()),
-                  ).length === 0 && (
-                    <div className="px-3 py-2 text-sm text-zinc-400">
-                      No results
-                    </div>
-                  )}
+                    ) : accountsError ? (
+                      <button
+                        type="button"
+                        onClick={loadAccounts}
+                        className="w-full px-3 py-3 text-left text-sm text-red-600 hover:bg-red-50"
+                      >
+                        {accountsError} Klik untuk mencoba lagi.
+                      </button>
+                    ) : filteredAccounts.length > 0 ? (
+                      filteredAccounts.slice(0, 50).map((account) => (
+                        <button
+                          type="button"
+                          key={account}
+                          onClick={() => {
+                            setForm((previous) => ({ ...previous, account }));
+                            setAccountOpen(false);
+                          }}
+                          className="block w-full px-3 py-2 text-left text-sm hover:bg-zinc-100"
+                        >
+                          {account}
+                        </button>
+                      ))
+                    ) : (
+                      <div className="px-3 py-3 text-sm text-zinc-400">
+                        {accounts.length === 0
+                          ? "Belum ada folder email di komputer server."
+                          : "Email tidak ditemukan."}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
