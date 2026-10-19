@@ -10,22 +10,12 @@ const PROVIDERS = [
 ];
 
 // NOTE
-const ACCOUNT_SYNC_INTERVAL_MS = 60_000;
-const ACCOUNT_REQUEST_POLL_INTERVAL_MS = 4_000;
+const ACCOUNT_SYNC_INTERVAL_MS = 20_000;
 
 type ResponseOtp = {
   otp: string;
   provider: string;
   account: string;
-};
-
-type AccountCreationJob = {
-  jobId: string;
-  account: string;
-  status: string;
-  message: string;
-  queuePosition?: number | null;
-  createdAt?: string;
 };
 
 export default function App() {
@@ -41,25 +31,10 @@ export default function App() {
   const [deleteAccountError, setDeleteAccountError] = useState(false);
   const accountPickerRef = useRef<HTMLDivElement>(null);
   const [newAccountEmail, setNewAccountEmail] = useState("");
-  const [accountJobSearch, setAccountJobSearch] = useState("");
-  const [launcherSearch, setLauncherSearch] = useState("");
+  const [adminAccountSearch, setAdminAccountSearch] = useState("");
   const [creatingAccount, setCreatingAccount] = useState(false);
   const [createAccountMessage, setCreateAccountMessage] = useState("");
   const [createAccountError, setCreateAccountError] = useState(false);
-  const [accountCreationJobs, setAccountCreationJobs] = useState<
-    AccountCreationJob[]
-  >([]);
-  const previousCreationStatuses = useRef<Record<string, string>>({});
-  const [finishingAccountCreation, setFinishingAccountCreation] = useState<
-    string | null
-  >(null);
-  const [focusingAccountCreation, setFocusingAccountCreation] = useState<
-    string | null
-  >(null);
-  const [focusingLauncher, setFocusingLauncher] = useState<string | null>(null);
-  const [launcherMessage, setLauncherMessage] = useState("");
-  const [launcherError, setLauncherError] = useState(false);
-
   const [loading, setLoading] = useState(false);
 
   const [result, setResult] = useState<ResponseOtp | null>(null);
@@ -73,33 +48,9 @@ export default function App() {
   const filteredAccounts = accounts.filter((account) =>
     account.toLowerCase().includes(form.account.trim().toLowerCase()),
   );
-  const filteredCreationJobs = [...accountCreationJobs]
-    .filter((job) =>
-      job.account.toLowerCase().includes(accountJobSearch.trim().toLowerCase()),
-    )
-    .sort((left, right) => {
-      const priority = (status: string) =>
-        status === "waiting_for_admin"
-          ? 0
-          : status === "completed" || status === "failed"
-            ? 2
-            : 1;
-      const statusOrder = priority(left.status) - priority(right.status);
-      if (statusOrder !== 0) return statusOrder;
-      if (left.status === "queued" && right.status === "queued") {
-        return (
-          (left.queuePosition ?? Number.MAX_SAFE_INTEGER) -
-          (right.queuePosition ?? Number.MAX_SAFE_INTEGER)
-        );
-      }
-      return (right.createdAt || "").localeCompare(left.createdAt || "");
-    });
-  const filteredLauncherAccounts = accounts.filter((account) =>
-    account.toLowerCase().includes(launcherSearch.trim().toLowerCase()),
+  const filteredAdminAccounts = accounts.filter((account) =>
+    account.toLowerCase().includes(adminAccountSearch.trim().toLowerCase()),
   );
-  const pendingAccountRequests = accountCreationJobs.filter(
-    (job) => !["completed", "failed"].includes(job.status),
-  ).length;
 
   const loadAccounts = useCallback(async () => {
     try {
@@ -174,21 +125,10 @@ export default function App() {
         throw new Error(data?.message || "Gagal membuat profil email.");
       }
 
-      setAccountCreationJobs((jobs) => [
-        ...jobs,
-        {
-          jobId: data.jobId,
-          account: newAccountEmail.trim(),
-          status: data.status || "queued",
-          message: data.message,
-          queuePosition: data.queuePosition,
-        },
-      ]);
       setCreateAccountError(false);
-      setCreateAccountMessage(
-        "Request terkirim. Admin akan memprosesnya. Koordinasi lanjutan lewat Discord.",
-      );
+      setCreateAccountMessage(data.message || "Chrome berhasil dibuka di server.");
       setNewAccountEmail("");
+      await loadAccounts();
     } catch (error) {
       setCreateAccountError(true);
       setCreateAccountMessage(
@@ -196,103 +136,6 @@ export default function App() {
       );
     } finally {
       setCreatingAccount(false);
-    }
-  };
-
-  const handleFinishAccountCreation = async (jobId: string) => {
-    try {
-      setFinishingAccountCreation(jobId);
-      const response = await fetch(`/api/accounts/create/${jobId}/complete`, {
-        method: "POST",
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data?.message || "Gagal melanjutkan antrean akun.");
-      }
-      setAccountCreationJobs((jobs) =>
-        jobs.map((job) =>
-          job.jobId === jobId
-            ? { ...job, status: "completed", message: data.message }
-            : job,
-        ),
-      );
-      await loadAccounts();
-    } catch (error) {
-      setAccountCreationJobs((jobs) =>
-        jobs.map((job) =>
-          job.jobId === jobId
-            ? {
-                ...job,
-                message:
-                  error instanceof Error
-                    ? error.message
-                    : "Gagal melanjutkan antrean akun.",
-              }
-            : job,
-        ),
-      );
-    } finally {
-      setFinishingAccountCreation(null);
-    }
-  };
-
-  const handleFocusAccountCreation = async (jobId: string) => {
-    try {
-      setFocusingAccountCreation(jobId);
-      const response = await fetch(`/api/accounts/create/${jobId}/focus`, {
-        method: "POST",
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data?.message || "Gagal memfokuskan file launcher.");
-      }
-      setAccountCreationJobs((jobs) =>
-        jobs.map((job) =>
-          job.jobId === jobId ? { ...job, message: data.message } : job,
-        ),
-      );
-    } catch (error) {
-      setAccountCreationJobs((jobs) =>
-        jobs.map((job) =>
-          job.jobId === jobId
-            ? {
-                ...job,
-                message:
-                  error instanceof Error
-                    ? error.message
-                    : "Gagal memfokuskan file launcher.",
-              }
-            : job,
-        ),
-      );
-    } finally {
-      setFocusingAccountCreation(null);
-    }
-  };
-
-  const handleFocusLauncher = async (account: string) => {
-    try {
-      setFocusingLauncher(account);
-      setLauncherMessage("");
-      const response = await fetch(
-        `/api/accounts/${encodeURIComponent(account)}/focus`,
-        { method: "POST" },
-      );
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data?.message || "Gagal memfokuskan file launcher.");
-      }
-      setLauncherError(false);
-      setLauncherMessage(data.message);
-    } catch (error) {
-      setLauncherError(true);
-      setLauncherMessage(
-        error instanceof Error
-          ? error.message
-          : "Gagal memfokuskan file launcher.",
-      );
-    } finally {
-      setFocusingLauncher(null);
     }
   };
 
@@ -341,56 +184,6 @@ export default function App() {
     return () => {
       window.clearInterval(interval);
       window.removeEventListener("focus", loadAccounts);
-    };
-  }, [loadAccounts]);
-
-  useEffect(() => {
-    let stopped = false;
-    const pollJobs = async () => {
-      try {
-        const response = await fetch("/api/accounts/create", {
-          cache: "no-store",
-        });
-        const data: unknown = await response.json();
-        if (!response.ok) throw new Error("Status antrean gagal dimuat.");
-        if (
-          !Array.isArray(data) ||
-          !data.every(
-            (job) =>
-              typeof job?.jobId === "string" &&
-              typeof job?.account === "string" &&
-              typeof job?.status === "string" &&
-              typeof job?.message === "string",
-          )
-        ) {
-          throw new Error("Format antrean akun tidak valid.");
-        }
-        if (stopped) return;
-
-        const jobs = data as AccountCreationJob[];
-        const newlyCompleted = jobs.some(
-          (job) =>
-            job.status === "completed" &&
-            previousCreationStatuses.current[job.jobId] !== "completed",
-        );
-        previousCreationStatuses.current = Object.fromEntries(
-          jobs.map((job) => [job.jobId, job.status]),
-        );
-        setAccountCreationJobs(jobs);
-        if (newlyCompleted) await loadAccounts();
-      } catch (error) {
-        console.error("Failed to sync account request queue:", error);
-      }
-    };
-
-    void pollJobs();
-    const interval = window.setInterval(
-      pollJobs,
-      ACCOUNT_REQUEST_POLL_INTERVAL_MS,
-    );
-    return () => {
-      stopped = true;
-      window.clearInterval(interval);
     };
   }, [loadAccounts]);
 
@@ -446,8 +239,7 @@ export default function App() {
             onClick={() => setActivePage("accounts")}
             className={`rounded-lg px-3 py-2 text-sm font-medium transition ${activePage === "accounts" ? "bg-white text-[#08a081] shadow-sm" : "text-zinc-500 hover:text-zinc-800"}`}
           >
-            Akun baru{" "}
-            {pendingAccountRequests > 0 ? `(${pendingAccountRequests})` : ""}
+            Akun baru
           </button>
           <button
             type="button"
@@ -646,8 +438,9 @@ export default function App() {
                 Email yang diminta
               </label>
               <p className="text-xs leading-5 text-zinc-600">
-                Siapa saja boleh request. Admin server yang membuka file
-                launcher, menyelesaikan login, lalu mengonfirmasi job.
+                Masukkan email lalu tekan Enter. Server akan membuat profil jika
+                belum ada, lalu langsung menjalankan file .bat untuk membuka
+                Chrome di komputer server. Selesaikan login secara manual.
               </p>
               <input
                 type="text"
@@ -665,7 +458,7 @@ export default function App() {
                 disabled={creatingAccount || !newAccountEmail.trim()}
                 className="h-10 w-full rounded-lg bg-[#08a081] text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
               >
-                {creatingAccount ? "Mengantrekan..." : "Request akun"}
+                {creatingAccount ? "Membuka Chrome..." : "Buka Chrome"}
               </button>
               {createAccountMessage && (
                 <p
@@ -679,116 +472,31 @@ export default function App() {
           )}
           {activePage === "admin" && (
             <div className="space-y-4">
-              <div className="space-y-3 rounded-xl border border-zinc-200 bg-zinc-50 p-4">
-                <label
-                  htmlFor="admin-request-search"
-                  className="block text-sm font-medium text-zinc-700"
-                >
-                  Request akun masuk
-                </label>
-                <input
-                  id="admin-request-search"
-                  type="search"
-                  autoComplete="off"
-                  placeholder="Cari request berdasarkan email"
-                  value={accountJobSearch}
-                  onChange={(event) => setAccountJobSearch(event.target.value)}
-                  className="h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 text-sm outline-none focus:border-[#08a081]"
-                />
-                <div className="max-h-64 space-y-2 overflow-y-auto">
-                  {filteredCreationJobs.length > 0 ? (
-                    filteredCreationJobs.map((job) => (
-                      <div
-                        key={job.jobId}
-                        className="space-y-3 rounded-xl border border-zinc-200 bg-white p-4"
-                      >
-                        <div className="space-y-2">
-                          <p className="break-all text-sm font-semibold leading-5 text-zinc-800">
-                            {job.account}
-                          </p>
-                          <span
-                            className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${job.status === "waiting_for_admin" ? "bg-amber-100 text-amber-800" : job.status === "completed" ? "bg-emerald-100 text-emerald-800" : job.status === "failed" ? "bg-red-100 text-red-700" : "bg-zinc-100 text-zinc-600"}`}
-                          >
-                            {job.status === "waiting_for_admin"
-                              ? "Menunggu admin server"
-                              : job.status === "completed"
-                                ? "Selesai"
-                                : job.status === "failed"
-                                  ? "Gagal"
-                                  : job.queuePosition
-                                    ? `Antrean ${job.queuePosition}`
-                                    : "Sedang disiapkan"}
-                          </span>
-                        </div>
-                        <p className="text-sm leading-5 text-zinc-600">
-                          {job.message}
-                        </p>
-                        {job.status === "waiting_for_admin" && (
-                          <div className="space-y-2">
-                            <p className="text-[11px] font-medium text-amber-800">
-                              Tindakan admin di komputer server
-                            </p>
-                            <button
-                              type="button"
-                              disabled={focusingAccountCreation === job.jobId}
-                              onClick={() =>
-                                void handleFocusAccountCreation(job.jobId)
-                              }
-                              className="h-9 w-full rounded-lg border border-zinc-300 bg-white text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
-                            >
-                              {focusingAccountCreation === job.jobId
-                                ? "Membuka file di server..."
-                                : "Fokuskan file .bat di server"}
-                            </button>
-                            <button
-                              type="button"
-                              disabled={finishingAccountCreation === job.jobId}
-                              onClick={() =>
-                                void handleFinishAccountCreation(job.jobId)
-                              }
-                              className="h-9 w-full rounded-lg border border-[#08a081] bg-white text-xs font-medium text-[#08a081] hover:bg-emerald-50 disabled:opacity-50"
-                            >
-                              {finishingAccountCreation === job.jobId
-                                ? "Melanjutkan antrean..."
-                                : "Login selesai, lanjutkan antrean"}
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    ))
-                  ) : (
-                    <p className="py-2 text-xs text-zinc-400">
-                      {accountCreationJobs.length === 0
-                        ? "Belum ada request akun."
-                        : "Request email tidak ditemukan."}
-                    </p>
-                  )}
-                </div>
-              </div>
-
               <section className="space-y-3 rounded-xl border border-zinc-200 bg-zinc-50 p-4">
                 <div>
                   <h2 className="text-sm font-semibold text-zinc-800">
-                    Cari & fokus file launcher
+                    Kelola profil akun
                   </h2>
                   <p className="mt-1 text-xs leading-5 text-zinc-600">
-                    Cari email dari profil yang sudah ada. Tombol fokus akan
-                    menyorot file .bat di File Explorer komputer server.
+                    Cari profil lokal untuk melihat atau menghapusnya. Akun baru
+                    dibuka langsung dari tab Akun baru.
                   </p>
                 </div>
                 <label
-                  htmlFor="launcher-search"
+                  htmlFor="admin-account-search"
                   className="block text-sm font-medium text-zinc-700"
                 >
                   Cari email
                 </label>
                 <input
-                  id="launcher-search"
+                  id="admin-account-search"
                   type="search"
                   autoComplete="off"
-                  placeholder="Ketik email untuk mencari file"
-                  value={launcherSearch}
-                  onChange={(event) => setLauncherSearch(event.target.value)}
+                  placeholder="Ketik email untuk mencari profil"
+                  value={adminAccountSearch}
+                  onChange={(event) =>
+                    setAdminAccountSearch(event.target.value)
+                  }
                   className="h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 text-sm outline-none focus:border-[#08a081]"
                 />
                 <div className="max-h-72 space-y-2 overflow-y-auto">
@@ -804,8 +512,8 @@ export default function App() {
                     >
                       {accountsError} Klik untuk mencoba lagi.
                     </button>
-                  ) : filteredLauncherAccounts.length > 0 ? (
-                    filteredLauncherAccounts.slice(0, 100).map((account) => (
+                  ) : filteredAdminAccounts.length > 0 ? (
+                    filteredAdminAccounts.slice(0, 100).map((account) => (
                       <div
                         key={account}
                         className="flex items-center gap-3 rounded-lg border border-zinc-200 bg-white p-2"
@@ -823,16 +531,6 @@ export default function App() {
                             ? "Menghapus..."
                             : "Hapus"}
                         </button>
-                        <button
-                          type="button"
-                          disabled={focusingLauncher !== null}
-                          onClick={() => void handleFocusLauncher(account)}
-                          className="shrink-0 rounded-lg border border-[#08a081] px-3 py-2 text-xs font-medium text-[#08a081] hover:bg-emerald-50 disabled:opacity-50"
-                        >
-                          {focusingLauncher === account
-                            ? "Membuka..."
-                            : "Fokus file .bat"}
-                        </button>
                       </div>
                     ))
                   ) : (
@@ -843,14 +541,6 @@ export default function App() {
                     </p>
                   )}
                 </div>
-                {launcherMessage && (
-                  <p
-                    aria-live="polite"
-                    className={`text-xs ${launcherError ? "text-red-600" : "text-emerald-700"}`}
-                  >
-                    {launcherMessage}
-                  </p>
-                )}
                 {deleteAccountMessage && (
                   <p
                     aria-live="polite"
