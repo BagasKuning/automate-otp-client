@@ -19,6 +19,9 @@ export async function handler(event) {
       method: event.httpMethod,
 
       headers: {
+        ...(event.headers?.["x-otp-computer"]
+          ? { "x-otp-computer": event.headers["x-otp-computer"] }
+          : {}),
         ...(process.env.SERVER_API_KEY || process.env.VITE_API_KEY
           ? {
               "x-api-key":

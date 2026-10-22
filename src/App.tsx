@@ -11,6 +11,8 @@ const PROVIDERS = [
 
 // NOTE
 const ACCOUNT_SYNC_INTERVAL_MS = 20_000;
+const COMPUTERS = ["Kantor", "Dinda", "Andira"] as const;
+const COMPUTER_STORAGE_KEY = "otp-computer";
 
 type ResponseOtp = {
   otp: string;
@@ -19,6 +21,10 @@ type ResponseOtp = {
 };
 
 export default function App() {
+  const [computer, setComputer] = useState<(typeof COMPUTERS)[number]>(() => {
+    const saved = window.localStorage.getItem(COMPUTER_STORAGE_KEY);
+    return COMPUTERS.find((name) => name === saved) ?? "Kantor";
+  });
   const [activePage, setActivePage] = useState<"otp" | "accounts" | "admin">(
     "otp",
   );
@@ -39,6 +45,11 @@ export default function App() {
 
   const [result, setResult] = useState<ResponseOtp | null>(null);
 
+  useEffect(() => {
+    window.localStorage.setItem(COMPUTER_STORAGE_KEY, computer);
+  }, [computer]);
+  const computerHeaders = { "x-otp-computer": computer };
+
   const [form, setForm] = useState({
     provider: "netflix",
     account: "",
@@ -55,7 +66,7 @@ export default function App() {
   const loadAccounts = useCallback(async () => {
     try {
       setAccountsLoading(true);
-      const response = await fetch("/api/accounts", { cache: "no-store" });
+      const response = await fetch("/api/accounts", { cache: "no-store", headers: computerHeaders });
       if (!response.ok) throw new Error(`Server returned ${response.status}.`);
 
       const data: unknown = await response.json();
@@ -85,6 +96,7 @@ export default function App() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...computerHeaders,
         },
         body: JSON.stringify({
           account: form.account,
@@ -114,7 +126,7 @@ export default function App() {
 
       const response = await fetch("/api/accounts/create", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...computerHeaders },
         body: JSON.stringify({
           email: newAccountEmail.trim(),
         }),
@@ -253,6 +265,13 @@ export default function App() {
           >
             Admin
           </button>
+        </div>
+
+        <div className="mb-5 flex items-center gap-3">
+          <label htmlFor="computer-select" className="text-sm font-medium text-zinc-700">Komputer</label>
+          <select id="computer-select" value={computer} onChange={(event) => setComputer(event.target.value as (typeof COMPUTERS)[number])} className="h-10 flex-1 rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none focus:border-[#08a081]">
+            {COMPUTERS.map((name) => <option key={name} value={name}>{name}</option>)}
+          </select>
         </div>
 
         {/* FORM */}
